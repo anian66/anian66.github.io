@@ -12,7 +12,7 @@
         
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #f3f4f6; /* 浅灰色背景 */
+            background-color: #000; /* 浅灰色背景 -> 黑色 */
             min-height: 100vh;
             overflow: hidden; 
         }
@@ -172,22 +172,43 @@
             content: "🔋 "; /* Battery icon for battery */
         }
         /* ==== END NEW VIRTUAL STATUS BAR STYLES ==== */
+
+        /* NEW: Home Indicator beautification (美化 Home 栏) */
+        #home-indicator-container > div {
+            transition: all 0.2s ease-in-out;
+        }
+        #home-indicator-container:active > div {
+            transform: scale(0.9); /* 点击时缩小 */
+            background-color: #ffffff; /* 点击时变全白 */
+            box-shadow: 0 0 12px rgba(255, 255, 255, 0.7) !important; /* 增强辉光 */
+        }
+
+        /* NEW: Added keyframe for JS-based click animation */
+        @keyframes pop {
+            0% { transform: scale(0.9); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        .animate-pop {
+            animation: pop 0.2s ease-in-out;
+        }
     </style>
 </head>
 <body>
 
     <!-- 1. Outer Centering Container -->
-    <div class="flex items-center justify-center min-h-screen p-4 bg-gray-200">
+    <!-- MODIFIED: Removed padding and bg-gray-200, set to w-screen h-screen for black bg -->
+    <div class="flex items-center justify-center w-screen h-screen">
         
         <!-- 2. 手机框架 (Phone Frame) - 约束尺寸和比例 -->
         <div id="phone-frame"
              class="relative shadow-2xl rounded-[2rem] bg-gray-900 overflow-hidden"
              style="
-                 width: min(95vw, 420px);
-                 height: min(90vh, 800px);
-                 max-width: 480px;
-                 max-height: 900px;
-                 padding: 6px;
+                 /* MODIFIED: Set to new aspect ratio and max-width, removed padding */
+                 width: 95vw;
+                 max-width: 412px;
+                 height: auto;
+                 aspect-ratio: 412 / 896;
                  display: flex;
                  align-items: stretch;
                  justify-content: center;
@@ -216,7 +237,8 @@
                     <!-- END REPLACED STATUS BAR -->
                     
                     <!-- NEW: Weather/Time/Location Widget (置顶显示) -->
-                    <div id="time-weather-widget" class="flex-shrink-0 mt-4 mx-4 p-5 bg-white/10 backdrop-blur-md rounded-3xl text-white shadow-xl">
+                    <!-- MODIFIED: Added w-[90%] as requested -->
+                    <div id="time-weather-widget" class="flex-shrink-0 mt-4 mx-4 p-5 bg-white/10 backdrop-blur-md rounded-3xl text-white shadow-xl w-[90%]">
                         <div class="flex items-center justify-between">
                             <!-- Left: Clock -->
                             <div>
@@ -226,7 +248,7 @@
                             <!-- Right: Weather/Location -->
                             <div class="text-right">
                                 <!-- ADDED ID for real-time temperature sync -->
-                                <p class="text-3xl font-bold" id="widget-temp-display">22°C</p>
+                                <span id="widget-temp-display" class="text-3xl font-bold">22°C</span>
                                 <div class="flex items-center justify-end text-sm text-gray-300 mt-1">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M19 12H5"/></svg>
                                     <!-- ADDED ID for real-time location/condition sync -->
@@ -400,8 +422,10 @@
 
                     <!-- D. Home Indicator (Home 栏) -->
                     <!-- OPTIMIZED: Changed to fixed/absolute positioning within inner-screen for stability -->
-                    <div id="home-indicator-container" class="absolute bottom-0 left-0 right-0 h-4 flex-shrink-0 flex items-center justify-center pb-2 z-60">
-                        <div class="h-1 w-32 rounded-full bg-white/70"></div>
+                    <!-- MODIFIED: Added cursor-pointer for desktop interaction -->
+                    <div id="home-indicator-container" class="absolute bottom-0 left-0 right-0 h-4 flex-shrink-0 flex items-center justify-center pb-2 z-60 cursor-pointer">
+                        <!-- MODIFIED: Made thicker (h-1.5), brighter (bg-white/80), and added glow (shadow-lg + inline style) -->
+                        <div class="h-1.5 w-32 rounded-full bg-white/80 shadow-lg" style="box-shadow: 0 0 8px rgba(255, 255, 255, 0.4);"></div>
                     </div>
                 </div>
                 
@@ -1451,6 +1475,55 @@
             // 3. AI App Specific Listener
             document.getElementById('generate-mission-btn-modal').addEventListener('click', generateMissionStatement);
 
+            // NEW: 4. Home Indicator Click Listener (Go Home + Animation)
+            const homeIndicator = document.getElementById('home-indicator-container');
+            homeIndicator.addEventListener('click', () => {
+                // If in edit mode, a tap on the home bar exits edit mode
+                if (isEditMode) {
+                    toggleEditMode(false);
+                    return;
+                }
+                
+                // Find any open modal
+                const activeModal = Array.from(document.querySelectorAll('.app-modal.is-open, #bluetooth-config-modal.is-open'))
+                    .find(modal => modal); 
+
+                let didCloseSomething = false;
+
+                if (activeModal) {
+                    didCloseSomething = true;
+                    // It's an app modal
+                    if (activeModal.classList.contains('app-modal')) {
+                        const modalId = activeModal.id;
+                        // Find the corresponding close button to get the app name for the message
+                        const closeButton = document.querySelector(`.close-app-btn[data-app-id="${modalId}"]`);
+                        const appName = closeButton ? closeButton.getAttribute('data-app-name') : 'App';
+                        closeApp(modalId, appName);
+                    } 
+                    // It's the bluetooth config
+                    else if (activeModal.id === 'bluetooth-config-modal') {
+                        closeBluetoothConfig();
+                    }
+                }
+                
+                // Also check and close notification center if it's open
+                const isNotifFullyOpen = parseFloat(notificationCenter.style.transform.match(/(-?\d+(\.\d+)?)/)?.[0] || 0) === 0;
+                if (isNotifFullyOpen) {
+                    didCloseSomething = true;
+                    closeNotificationCenter();
+                }
+
+                // Add a "pop" animation class for visual feedback
+                const indicatorBar = homeIndicator.querySelector('div');
+                if (indicatorBar && didCloseSomething) {
+                    indicatorBar.classList.add('animate-pop');
+                    setTimeout(() => {
+                        indicatorBar.classList.remove('animate-pop');
+                    }, 200); // Duration of the animation (matches CSS)
+                }
+            });
+
+
             // --- Status Bar Logic from User Input ---
 
             /* ========== 时间同步 - MODIFIED for Widget/Notif Sync ========== */
@@ -1911,6 +1984,10 @@
             }
 
             // --- App Modal Swipe Handlers (Swipe Up to Close) ---
+            /* // ==========================================================
+            // MODIFIED: 禁用所有应用的上滑关闭功能 (Disabled by user request)
+            // ==========================================================
+            
             function handleAppStart(y, modalElement) {
                 if (isEditMode) return; // Disable swipe in edit mode
                 dragStartY = y;
@@ -1965,6 +2042,10 @@
                 }
                 activeSwipeModal = null;
             }
+            // ==========================================================
+            // END OF DISABLED BLOCK
+            // ==========================================================
+            */
 
 
             // --- Global Touch/Mouse Dispatcher ---
@@ -1987,11 +2068,13 @@
                     return; 
                 }
                 
-                // 2. App/Modal Swipe
+                // 2. App/Modal Swipe (DISABLED BY USER REQUEST)
+                /*
                 if (activeModal) { 
                     handleAppStart(clientY, activeModal); 
                     return;
                 }
+                */
                 
                 // 3. Notification Swipe (Only runs if no App Modal is open)
                 if (!activeModal && !isLocked) {
@@ -2025,18 +2108,24 @@
 
                 if (isNotifSwiping) {
                     handleNotifMove(e.touches[0].clientY);
-                } else if (isAppSwiping) { 
+                } 
+                /* (DISABLED BY USER REQUEST)
+                else if (isAppSwiping) { 
                     handleAppMove(e.touches[0].clientY);
                 }
+                */
             }, { passive: false });
 
 
             document.addEventListener('touchend', (e) => { 
                 if (isNotifSwiping) {
                     handleNotifEnd(e.changedTouches[0].clientY); 
-                } else if (isAppSwiping) { 
+                } 
+                /* (DISABLED BY USER REQUEST)
+                else if (isAppSwiping) { 
                     handleAppEnd(e.changedTouches[0].clientY);
                 }
+                */
             });
 
 
@@ -2056,9 +2145,14 @@
 
                 // Horizontal slider handles lock screen start
                 
+                // (DISABLED BY USER REQUEST)
+                /*
                 if (activeModal) { 
                     handleAppStart(e.clientY, activeModal);
-                } else if (!activeModal && !isLocked && (touchRelativeY < topSwipeZone || isNotifFullyOpen)) {
+                } else 
+                */
+                // MODIFIED: Removed 'else'
+                if (!activeModal && !isLocked && (touchRelativeY < topSwipeZone || isNotifFullyOpen)) {
                     // Ignore clicks on actionable items
                     if (e.target.closest('.app-icon-btn, .dock-icon-btn, .toggle-btn')) return;
                     
@@ -2074,28 +2168,38 @@
             document.addEventListener('mousemove', (e) => { 
                 if (isNotifSwiping) {
                     handleNotifMove(e.clientY); 
-                } else if (isAppSwiping) { 
+                } 
+                /* (DISABLED BY USER REQUEST)
+                else if (isAppSwiping) { 
                     handleAppMove(e.clientY);
                 }
+                */
             });
             
             document.addEventListener('mouseup', (e) => { 
                 if (isNotifSwiping) {
                     handleNotifEnd(e.clientY); 
-                } else if (isAppSwiping) { 
+                } 
+                /* (DISABLED BY USER REQUEST)
+                else if (isAppSwiping) { 
                     handleAppEnd(e.clientY);
                 }
+                */
             });
             
             document.addEventListener('mouseleave', (e) => { 
                 if (isNotifSwiping) {
                     handleNotifEnd(dragStartY + 1); 
-                } else if (isAppSwiping) {
+                } 
+                /* (DISABLED BY USER REQUEST)
+                else if (isAppSwiping) {
                     handleAppEnd(dragStartY + 1);
                 }
+                */
             });
 
         });
     </script>
 </body>
 </html>
+
