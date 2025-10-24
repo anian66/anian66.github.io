@@ -238,7 +238,7 @@
                 <!-- Main Content Container (Home Screen) -->
                 <div id="main-content" 
                     class="w-full h-full transition-all duration-500 ease-in-out flex flex-col p-2" 
-                    style="transform: scale(0.95); filter: blur(2px);">
+                    style="transform: scale(0.95); filter: blur(2px) brightness(1.0);">
                     
                     <!-- A. Status Bar (状态栏: 实时同步) -->
                     <div class="status-bar flex-shrink-0 mx-2">
@@ -415,6 +415,30 @@
                                             </div>
                                             <span>主题</span>
                                         </button>
+
+<!-- QQ -->
+<button id="qq-app-icon" class="relative flex flex-col items-center space-y-1 text-xs text-white app-icon-btn">
+  <div class="w-12 h-12 bg-blue-500 rounded-xl shadow-lg flex items-center justify-center relative">
+    <div id="qq-unread-badge" class="hidden absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full ring-2 ring-black"></div>
+    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 2c3.314 0 6 2.686 6 6v2a6 6 0 01-12 0V8c0-3.314 2.686-6 6-6z"/>
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14v7m0 0h-3m3 0h3"/>
+    </svg>
+  </div>
+  <span>QQ</span>
+</button>
+
+<!-- 微信 -->
+<button id="wechat-app-icon" class="relative flex flex-col items-center space-y-1 text-xs text-white app-icon-btn">
+  <div class="w-12 h-12 bg-green-500 rounded-xl shadow-lg flex items-center justify-center relative">
+    <div id="wechat-unread-badge" class="hidden absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full ring-2 ring-black"></div>
+    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M7 8a4 4 0 0 1 6.7-2.9A4.5 4.5 0 0 1 19 9.5a4.5 4.5 0 0 1-4 4.4l-1.5.1L11 16v-1a4 4 0 0 1-4-4z"/>
+    </svg>
+  </div>
+  <span>微信</span>
+</button>
+
                                     </div>
                                 </div>
                             </div>
@@ -452,6 +476,17 @@
                                             </div>
                                             <span>天气</span>
                                         </button>
+<!-- 角色配置 -->
+<button id="persona-app-icon" class="flex flex-col items-center space-y-1 text-xs text-white app-icon-btn">
+  <div class="w-12 h-12 bg-purple-500 rounded-xl shadow-lg flex items-center justify-center">
+    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="7" r="4"></circle>
+      <path d="M5.5 21a8.38 8.38 0 0 1 13 0"/>
+      <path d="M12 14v3m0 0l-2 2m2-2l2 2"/>
+    </svg>
+  </div>
+  <span>角色配置</span>
+</button>
                                     </div>
                                 </div>
                             </div>
@@ -1176,6 +1211,7 @@
         let isPagingSwiping = false;
         let pageDragStartX = 0;
         const pageSwipeThreshold = 50; // Min drag distance to trigger swipe
+        let currentBrightness = 1.0; // NEW: Store current brightness, default 1.0 (slider=70)
 
         /* --- REPLACED BLUETOOTH STATE & LOGIC --- */
         // 🔹 1. New State from User's Logic
@@ -1562,6 +1598,30 @@
             const clearAllBtn = document.getElementById('clear-all-notifications');
             const startScanBtn = document.getElementById('start-bluetooth-scan');
             
+            // NEW: Brightness Slider Logic
+            const brightnessSlider = document.getElementById('brightness-slider');
+            brightnessSlider.addEventListener('input', (e) => {
+                const value = parseInt(e.target.value, 10);
+                
+                if (value < 70) {
+                    // Scale from 0.3 (at 0) to 1.0 (at 70)
+                    currentBrightness = 0.3 + (value / 70) * 0.7;
+                } else {
+                    // Scale from 1.0 (at 70) to 1.3 (at 100)
+                    currentBrightness = 1.0 + ((value - 70) / 30) * 0.3;
+                }
+                
+                // Apply the filter
+                // Check if blurred (lock screen)
+                if (mainContent.style.filter.includes('blur(2px)')) {
+                     mainContent.style.filter = `blur(2px) brightness(${currentBrightness.toFixed(2)})`;
+                } else {
+                    // Not blurred (home screen)
+                     mainContent.style.filter = `blur(0) brightness(${currentBrightness.toFixed(2)})`;
+                }
+            });
+            // --- END NEW Brightness Logic ---
+            
             // --- Utility to toggle Edit Mode (Unchanged) ---
             function toggleEditMode(enable) {
                 const appIcons = document.querySelectorAll('.app-icon-btn');
@@ -1787,7 +1847,8 @@
                 lockScreen.style.transition = 'transform 0.5s ease-out';
                 lockScreen.style.transform = 'translateY(-100%)';
                 mainContent.style.transform = 'scale(1)';
-                mainContent.style.filter = 'blur(0)';
+                // MODIFIED: Apply stored brightness value
+                mainContent.style.filter = `blur(0) brightness(${currentBrightness.toFixed(2)})`;
 
                 setTimeout(() => {
                     lockScreen.style.display = 'none';
@@ -2057,5 +2118,515 @@
             
         });
     </script>
+
+
+
+
+
+
+
+<!-- QQ 模态框 -->
+<!-- QQ 模态框（高仿聊天） -->
+<div id="qq-app-modal" class="absolute inset-0 z-[55] bg-gray-50 flex flex-col app-modal">
+  <div class="flex-shrink-0 p-4 bg-blue-600 text-white shadow-md flex items-center justify-between">
+    <button class="close-app-btn text-lg font-medium hover:text-blue-200 transition" data-app-id="qq-app-modal" data-app-name="QQ">
+      <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 inline-block mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline>
+      </svg>
+      返回
+    </button>
+    <div class="flex flex-col leading-tight text-center">
+      <span id="qq-contact-name" class="text-xl font-bold">联系人</span>
+      <span class="text-[10px] font-normal text-blue-200 -mt-0.5">QQ · 在线</span>
+    </div>
+    <div class="w-16"></div>
+  </div>
+
+  <div class="flex flex-col flex-grow bg-gray-100">
+    <div id="qq-chat-scroll" class="flex-1 overflow-y-auto p-4 space-y-3"></div>
+    <div class="p-3 bg-white border-t flex items-center gap-2">
+      <input id="qq-input" class="flex-1 bg-gray-100 rounded-xl px-3 py-2 text-sm outline-none" placeholder="发消息..." />
+      <button id="qq-send-btn" class="bg-blue-600 text-white text-sm font-medium px-3 py-2 rounded-xl active:scale-95">
+        发送
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- 微信 模态框 -->
+<!-- 微信 模态框（高仿聊天） -->
+<div id="wechat-app-modal" class="absolute inset-0 z-[55] bg-gray-50 flex flex-col app-modal">
+  <div class="flex-shrink-0 p-4 bg-green-600 text-white shadow-md flex items-center justify-between">
+    <button class="close-app-btn text-lg font-medium hover:text-green-200 transition" data-app-id="wechat-app-modal" data-app-name="微信">
+      <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 inline-block mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline>
+      </svg>
+      返回
+    </button>
+    <div class="flex flex-col leading-tight text-center">
+      <span id="wechat-contact-name" class="text-xl font-bold">联系人</span>
+      <span class="text-[10px] font-normal text-green-200 -mt-0.5">微信</span>
+    </div>
+    <div class="w-16"></div>
+  </div>
+
+  <div class="flex flex-col flex-grow bg-gray-100">
+    <div id="wechat-chat-scroll" class="flex-1 overflow-y-auto p-4 space-y-3"></div>
+    <div class="p-3 bg-white border-t flex items-center gap-2">
+      <input id="wechat-input" class="flex-1 bg-gray-100 rounded-xl px-3 py-2 text-sm outline-none" placeholder="发消息..." />
+      <button id="wechat-send-btn" class="bg-green-600 text-white text-sm font-medium px-3 py-2 rounded-xl active:scale-95">
+        发送
+      </button>
+    </div>
+  </div>
+</div>
+
+
+
+
+<!-- 角色配置 模态框 -->
+<div id="persona-app-modal" class="absolute inset-0 z-[55] bg-gray-50 flex flex-col app-modal">
+  <div class="flex-shrink-0 p-4 bg-purple-600 text-white shadow-md flex items-center justify-between">
+    <button class="close-app-btn text-lg font-medium hover:text-purple-200 transition" data-app-id="persona-app-modal" data-app-name="角色配置">
+      <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 inline-block mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline>
+      </svg>
+      返回
+    </button>
+    <h2 class="text-xl font-bold">角色配置</h2>
+    <div class="w-16"></div>
+  </div>
+
+  <div class="flex flex-col flex-grow bg-gray-100">
+    <div class="flex-1 overflow-y-auto p-4 space-y-4">
+      <div class="bg-white rounded-xl shadow p-4">
+        <p class="text-sm text-gray-700 mb-2 font-semibold">说明</p>
+        <p class="text-xs text-gray-500 leading-relaxed">
+          请粘贴 / 编辑角色卡（JSON）。<br/>
+          字段含义：<br/>
+          - <code class="font-mono text-[11px] bg-gray-100 px-1 py-0.5 rounded">name</code> 角色昵称<br/>
+          - <code class="font-mono text-[11px] bg-gray-100 px-1 py-0.5 rounded">tone</code> 说话风格简介<br/>
+          - <code class="font-mono text-[11px] bg-gray-100 px-1 py-0.5 rounded">replyChance</code> 回复概率 0~1<br/>
+          - <code class="font-mono text-[11px] bg-gray-100 px-1 py-0.5 rounded">altAccount</code> 是否会用小号<br/>
+        </p>
+      </div>
+
+      <div class="bg-white rounded-xl shadow p-4">
+        <label class="block text-sm font-semibold text-gray-700 mb-2">角色卡 JSON</label>
+        <textarea id="persona-json-input" class="w-full h-48 text-xs bg-gray-50 rounded-xl border border-gray-300 p-3 font-mono leading-relaxed outline-none resize-none shadow-inner"></textarea>
+        <p class="text-[11px] text-gray-400 mt-2">
+          示例: {"name":"小明","tone":"阳光开朗，关心你吃饭睡觉","replyChance":0.8,"altAccount":false}
+        </p>
+        <div id="persona-save-status" class="text-xs font-medium mt-2 hidden text-green-600">已保存</div>
+      </div>
+    </div>
+
+    <div class="p-3 bg-white border-t flex justify-end">
+      <button id="persona-save-btn" class="bg-purple-600 text-white text-sm font-medium px-4 py-2 rounded-xl active:scale-95">
+        保存角色
+      </button>
+    </div>
+  </div>
+</div>
+<!-- 全局交互脚本：通知中心 / 聊天系统 / 角色配置 -->
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const notificationCenter = document.getElementById("notification-center");
+  const notifHomeIndicator = document.getElementById("notif-home-indicator");
+  const statusBar = document.querySelector(".status-bar");
+
+  let startY = 0;
+  let endY = 0;
+
+  if (statusBar && notificationCenter) {
+    statusBar.addEventListener("touchstart", (e) => {
+      startY = e.touches[0].clientY;
+    });
+    statusBar.addEventListener("touchend", (e) => {
+      endY = e.changedTouches[0].clientY;
+      if (endY - startY > 40) {
+        notificationCenter.classList.add("is-open");
+      }
+    });
+  }
+
+  if (notificationCenter) {
+    notificationCenter.addEventListener("touchstart", (e) => {
+      startY = e.touches[0].clientY;
+    });
+    notificationCenter.addEventListener("touchmove", (e) => {
+      endY = e.touches[0].clientY;
+      const deltaY = startY - endY;
+      if (deltaY > 0) {
+        notificationCenter.style.transform = `translateY(-${Math.min(deltaY, 100)}px)`;
+      }
+    });
+    notificationCenter.addEventListener("touchend", (e) => {
+      endY = e.changedTouches[0].clientY;
+      const deltaY = startY - endY;
+      if (deltaY > 50) {
+        notificationCenter.classList.remove("is-open");
+      }
+      notificationCenter.style.transform = "";
+    });
+
+    let mouseStartY = 0;
+    notificationCenter.addEventListener("mousedown", (e) => {
+      mouseStartY = e.clientY;
+    });
+    notificationCenter.addEventListener("mouseup", (e) => {
+      if (mouseStartY - e.clientY > 50) {
+        notificationCenter.classList.remove("is-open");
+      }
+    });
+  }
+
+  if (notifHomeIndicator && notificationCenter) {
+    notifHomeIndicator.addEventListener("click", () => {
+      notificationCenter.classList.remove("is-open");
+    });
+  }
+
+  function loadPersona() {
+    try {
+      return JSON.parse(localStorage.getItem("chatPersona")) || {
+        name: "小明",
+        tone: "日常朋友型，轻松、会关心吃饭睡觉，也会说哈哈哈这种口头禅",
+        replyChance: 0.8,
+        altAccount: false
+      };
+    } catch (e) {
+      return {
+        name: "小明",
+        tone: "日常朋友型，轻松、会关心吃饭睡觉，也会说哈哈哈这种口头禅",
+        replyChance: 0.8,
+        altAccount: false
+      };
+    }
+  }
+
+  function savePersona(p) {
+    localStorage.setItem("chatPersona", JSON.stringify(p));
+  }
+
+  function loadChats() {
+    try {
+      return JSON.parse(localStorage.getItem("chatLog")) || [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveChats(log) {
+    localStorage.setItem("chatLog", JSON.stringify(log));
+  }
+
+  function formatTime(ts) {
+    const d = new Date(ts);
+    const h = String(d.getHours()).padStart(2, "0");
+    const m = String(d.getMinutes()).padStart(2, "0");
+    return `${h}:${m}`;
+  }
+
+  let persona = loadPersona();
+  let chatLog = loadChats();
+  let activeApp = null;
+
+  const wechatScroll = document.getElementById("wechat-chat-scroll");
+  const qqScroll = document.getElementById("qq-chat-scroll");
+
+  function renderChat(app) {
+    const container = app === "wechat" ? wechatScroll : qqScroll;
+    if (!container) return;
+    container.innerHTML = "";
+
+    const myColor = app === "wechat" ? "bg-green-500" : "bg-blue-500";
+
+    const appMessages = chatLog.filter(msg => msg.app === app);
+
+    appMessages.forEach(msg => {
+        const wrapper = document.createElement("div");
+        const bubble = document.createElement("div");
+        const meta = document.createElement("div");
+
+        if (msg.sender === "user") {
+          wrapper.className = "flex flex-col items-end";
+          bubble.className = `max-w-[70%] rounded-2xl px-3 py-2 text-white text-sm shadow ${myColor}`;
+          bubble.textContent = msg.text;
+
+          const readText = msg.read ? "已读" : "未读";
+          meta.className = "text-[10px] text-gray-400 mt-1 text-right";
+          meta.textContent = `${formatTime(msg.ts)} · ${readText}`;
+        } else {
+          wrapper.className = "flex flex-col items-start";
+          bubble.className = "max-w-[70%] rounded-2xl px-3 py-2 text-sm shadow bg-gray-200 text-gray-800";
+          bubble.textContent = msg.text;
+
+          meta.className = "text-[10px] text-gray-400 mt-1 text-left";
+          meta.textContent = `${formatTime(msg.ts)}`;
+        }
+
+        wrapper.appendChild(bubble);
+        wrapper.appendChild(meta);
+        container.appendChild(wrapper);
+    });
+
+    container.scrollTop = container.scrollHeight;
+  }
+
+  const wechatBadge = document.getElementById("wechat-unread-badge");
+  const qqBadge = document.getElementById("qq-unread-badge");
+
+  function updateUnreadBadges() {
+    const hasWechatUnread = chatLog.some(m => m.app === "wechat" && m.sender === "npc" && !m.viewed);
+    const hasQQUnread = chatLog.some(m => m.app === "qq" && m.sender === "npc" && !m.viewed);
+
+    if (wechatBadge) {
+      if (hasWechatUnread) {
+        wechatBadge.classList.remove("hidden");
+      } else {
+        wechatBadge.classList.add("hidden");
+      }
+    }
+
+    if (qqBadge) {
+      if (hasQQUnread) {
+        qqBadge.classList.remove("hidden");
+      } else {
+        qqBadge.classList.add("hidden");
+      }
+    }
+  }
+
+  const wechatModal = document.getElementById("wechat-app-modal");
+  const qqModal = document.getElementById("qq-app-modal");
+  const personaModal = document.getElementById("persona-app-modal");
+
+  function openChat(app) {
+    activeApp = app;
+    if (app === "wechat" && wechatModal) {
+      wechatModal.classList.add("is-open");
+    } else if (app === "qq" && qqModal) {
+      qqModal.classList.add("is-open");
+    }
+
+    chatLog = chatLog.map(msg => {
+      if (msg.app === app && msg.sender === "npc") {
+        return { ...msg, viewed: true };
+      }
+      return msg;
+    });
+    saveChats(chatLog);
+    renderChat(app);
+    updateUnreadBadges();
+    updateHeaderNames();
+  }
+
+  function openPersonaConfig() {
+    activeApp = null;
+    if (personaModal) {
+      personaModal.classList.add("is-open");
+    }
+    const textarea = document.getElementById("persona-json-input");
+    const statusEl = document.getElementById("persona-save-status");
+    if (textarea) {
+      textarea.value = JSON.stringify(persona, null, 2);
+    }
+    if (statusEl) {
+      statusEl.classList.add("hidden");
+    }
+  }
+
+  function closeAppById(appId) {
+    const el = document.getElementById(appId);
+    if (!el) return;
+    el.classList.remove("is-open");
+
+    if (appId === "wechat-app-modal" || appId === "qq-app-modal") {
+      activeApp = null;
+      updateUnreadBadges();
+    }
+  }
+
+  const wechatInput = document.getElementById("wechat-input");
+  const wechatSend = document.getElementById("wechat-send-btn");
+  const qqInput = document.getElementById("qq-input");
+  const qqSend = document.getElementById("qq-send-btn");
+
+  function pushUserMessage(app, text) {
+    if (!text || !text.trim()) return;
+    const now = Date.now();
+    chatLog.push({
+      sender: "user",
+      text: text.trim(),
+      ts: now,
+      app,
+      read: false,
+      viewed: true
+    });
+    saveChats(chatLog);
+    renderChat(app);
+    scheduleAutoReply(app);
+  }
+
+  function generateReplyText() {
+    const base = [
+      `${persona.name} 在呢，刚看到你的消息～`,
+      `我刚要找你说话哈哈哈`,
+      `我看到了，别急别急`,
+      `你现在在干嘛呀`,
+      `好我记住了！`,
+      `为啥突然这么说哈哈`,
+      `我有认真在听的～`
+    ];
+    const pick = base[Math.floor(Math.random() * base.length)];
+    return pick;
+  }
+
+  function scheduleAutoReply(app) {
+    const delay = 1200 + Math.random() * 800;
+    setTimeout(() => {
+      let changed = false;
+      chatLog = chatLog.map(msg => {
+        if (msg.app === app && msg.sender === "user" && !msg.read) {
+          changed = true;
+          return { ...msg, read: true };
+        }
+        return msg;
+      });
+
+      if (Math.random() < (persona.replyChance || 0.8)) {
+        const now = Date.now();
+        const replyText = generateReplyText();
+        chatLog.push({
+          sender: "npc",
+          text: replyText,
+          ts: now,
+          app,
+          read: true,
+          viewed: (activeApp === app)
+        });
+      }
+
+      saveChats(chatLog);
+      if (activeApp === app) {
+        renderChat(app);
+      }
+      updateUnreadBadges();
+    }, delay);
+  }
+
+  if (wechatSend && wechatInput) {
+    wechatSend.addEventListener("click", () => {
+      pushUserMessage("wechat", wechatInput.value);
+      wechatInput.value = "";
+    });
+    wechatInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        pushUserMessage("wechat", wechatInput.value);
+        wechatInput.value = "";
+      }
+    });
+  }
+
+  if (qqSend && qqInput) {
+    qqSend.addEventListener("click", () => {
+      pushUserMessage("qq", qqInput.value);
+      qqInput.value = "";
+    });
+    qqInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        pushUserMessage("qq", qqInput.value);
+        qqInput.value = "";
+      }
+    });
+  }
+
+  const wechatNameEl = document.getElementById("wechat-contact-name");
+  const qqNameEl = document.getElementById("qq-contact-name");
+
+  function updateHeaderNames() {
+    if (wechatNameEl) wechatNameEl.textContent = persona.name || "联系人";
+    if (qqNameEl) qqNameEl.textContent = persona.name || "联系人";
+  }
+  updateHeaderNames();
+
+  const personaBtn = document.getElementById("persona-save-btn");
+  const personaTextarea = document.getElementById("persona-json-input");
+  const personaStatus = document.getElementById("persona-save-status");
+
+  if (personaBtn && personaTextarea) {
+    personaBtn.addEventListener("click", () => {
+      try {
+        const parsed = JSON.parse(personaTextarea.value);
+        persona = {
+          name: parsed.name || "未命名",
+          tone: parsed.tone || "",
+          replyChance: typeof parsed.replyChance === "number" ? parsed.replyChance : 0.8,
+          altAccount: !!parsed.altAccount
+        };
+        savePersona(persona);
+        updateHeaderNames();
+        if (personaStatus) {
+          personaStatus.classList.remove("hidden");
+          personaStatus.classList.remove("text-red-600");
+          personaStatus.classList.add("text-green-600");
+          personaStatus.textContent = "已保存 ✔";
+          setTimeout(() => {
+            personaStatus.classList.add("hidden");
+          }, 2000);
+        }
+      } catch (err) {
+        if (personaStatus) {
+          personaStatus.classList.remove("hidden");
+          personaStatus.classList.remove("text-green-600");
+          personaStatus.classList.add("text-red-600");
+          personaStatus.textContent = "JSON 解析失败，请检查格式";
+          setTimeout(() => {
+            personaStatus.classList.add("hidden");
+            personaStatus.classList.remove("text-red-600");
+            personaStatus.classList.add("text-green-600");
+          }, 2500);
+        }
+      }
+    });
+  }
+
+  const wechatIcon = document.getElementById("wechat-app-icon");
+  const qqIcon = document.getElementById("qq-app-icon");
+  const personaIcon = document.getElementById("persona-app-icon");
+
+  if (wechatIcon) {
+    wechatIcon.addEventListener("click", () => {
+      openChat("wechat");
+    });
+  }
+  if (qqIcon) {
+    qqIcon.addEventListener("click", () => {
+      openChat("qq");
+    });
+  }
+  if (personaIcon) {
+    personaIcon.addEventListener("click", () => {
+      openPersonaConfig();
+    });
+  }
+
+  const closeButtons = document.querySelectorAll(".close-app-btn");
+  closeButtons.forEach(btn => {
+    btn.addEventListener("click", () => {
+      const appId = btn.dataset.appId;
+      closeAppById(appId);
+    });
+  });
+
+  renderChat("wechat");
+  renderChat("qq");
+  updateUnreadBadges();
+});
+</script>
 </body>
 </html>
+
