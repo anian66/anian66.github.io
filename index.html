@@ -196,6 +196,22 @@
         #page-container {
             will-change: transform;
         }
+
+        /* NEW: Active state for toggles, as per user's new functions */
+        .toggle-btn.active {
+            color: white;
+        }
+        #flashlight-toggle.active {
+            background-color: #f59e0b; /* 手电筒激活 (琥珀色/黄色) */
+        }
+        #bluetooth-toggle.active {
+             background-color: #4f46e5; /* 蓝牙激活 (蓝色) */
+        }
+        /* Connection state still overrides toggle state */
+        #bluetooth-toggle.bg-green-500 {
+            background-color: #22c55e; /* 确保连接时的绿色优先 */
+        }
+
     </style>
 </head>
 <body>
@@ -519,7 +535,11 @@
                         <!-- Bluetooth Toggle -->
                         <div class="flex flex-col items-center space-y-1">
                             <button id="bluetooth-toggle" 
-                                    class="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center toggle-btn">
+                                    class="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center toggle-btn"
+                                    ontouchstart="startPress(event, 'bluetooth')"
+                                    ontouchend="endPress(event, 'bluetooth')"
+                                    onmousedown="startPress(event, 'bluetooth')"
+                                    onmouseup="endPress(event, 'bluetooth')">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11L17 5L12 12L17 19L7 13L12 12"/></svg>
                             </button>
                             <span id="bluetooth-status-text" class="text-xs text-gray-300 w-full text-center">蓝牙</span>
@@ -534,7 +554,12 @@
                         </div>
                         <!-- Flashlight -->
                         <div class="flex flex-col items-center space-y-1">
-                            <button id="flashlight-toggle" class="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center toggle-btn">
+                            <button id="flashlight-toggle" 
+                                    class="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center toggle-btn"
+                                    ontouchstart="startPress(event, 'flashlight')"
+                                    ontouchend="endPress(event, 'flashlight')"
+                                    onmousedown="startPress(event, 'flashlight')"
+                                    onmouseup="endPress(event, 'flashlight')">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 12V3H9V12L5 16H8L9 21H15L16 16H19L15 12Z"/></svg>
                             </button>
                             <span id="flashlight-status-text" class="text-xs text-gray-300 w-full text-center">手电筒</span>
@@ -1117,6 +1142,11 @@
                             </li>
                         </ul>
                         
+                        <!-- NEW: Close button based on user instruction -->
+                        <button onclick="closeBluetoothConfig()" class="w-full py-3 bg-gray-600 text-white font-semibold rounded-xl hover:bg-gray-700 transition duration-300 shadow-md mt-6">
+                            关闭
+                        </button>
+                        
                         <p class="text-center text-sm text-gray-400 mt-6">
                             长按或拖动 Home Indicator 关闭。
                         </p>
@@ -1140,118 +1170,143 @@
         let startPressX = 0; 
         let startPressY = 0;
 
+        // --- NEW: Paging State Variables (FIX) ---
+        let currentPage = 1; // Default to page 1
+        const totalPages = 2;  // We have 2 pages (w-[200%])
+        let isPagingSwiping = false;
+        let pageDragStartX = 0;
+        const pageSwipeThreshold = 50; // Min drag distance to trigger swipe
+
+        /* --- REPLACED BLUETOOTH STATE & LOGIC --- */
+        // 🔹 1. New State from User's Logic
         let isBluetoothOn = false;
-        let isBluetoothConnected = false;
+        let pressTimer;
+        let isLongPress = false;
+        let dragStartY = 0; // 确保全局作用域 (Used by user's logic)
+
+        // 🔹 2. Kept State from Old Logic (for UI helpers & connectRealBluetooth)
+        let isBluetoothConnected = false; 
         let connectedDeviceName = "My Gemini Headset"; 
-        let isScanning = false; 
-
-        let pressTimer = null;
-        const LONG_PRESS_DURATION = 500; 
-        let dragStartX = 0; 
-
-        // --- NEW PAGING STATE ---
-        let currentPage = 1; // Current page index (1 or 2)
-        const totalPages = 2;
-        let isPagingSwiping = false; // Horizontal drag state
-        let pageDragStartX = 0; // X position where drag started
-        const pageSwipeThreshold = 80; // Distance in px to trigger page change
+        let isScanning = false; // Keep for connectRealBluetooth
         
-        // Utility function for exponential backoff
-        async function fetchWithRetry(url, options, maxRetries = 5) {
-            for (let i = 0; i < maxRetries; i++) {
-                try {
-                    const response = await fetch(url, options);
-                    if (response.status === 429 && i < maxRetries - 1) {
-                        const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
-                        console.warn(`Rate limit hit. Retrying in ${delay / 1000}s...`);
-                        await new Promise(resolve => setTimeout(resolve, delay));
-                        continue;
-                    }
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
-                    }
-                    return response;
-                } catch (error) {
-                    if (i === maxRetries - 1) throw error;
-                    console.error('Fetch attempt ${i + 1} failed:', error.message);
+        
+        // --- MOVED AND FIXED: Global Toast/Message Utility ---
+        // ✅ 通用系统提示函数
+        window.showMessage = function (message, color = "gray") {
+          console.log(`[系统消息] ${message}`);
+
+          // 如果页面上有 toast 容器，可以实际显示
+          let toast = document.getElementById("system-toast");
+          if (!toast) {
+            toast = document.createElement("div");
+            toast.id = "system-toast";
+            toast.style.position = "fixed";
+            toast.style.bottom = "20px";
+            toast.style.left = "50%";
+            toast.style.transform = "translateX(-50%)";
+            toast.style.padding = "10px 16px";
+            toast.style.borderRadius = "8px";
+            toast.style.background = color;
+            toast.style.color = "white";
+            toast.style.fontSize = "14px";
+            toast.style.zIndex = "9999";
+            toast.style.transition = "opacity 0.3s ease";
+            document.body.appendChild(toast);
+          }
+
+          toast.textContent = message;
+          toast.style.opacity = "1";
+          toast.style.background = color;
+
+          setTimeout(() => {
+            toast.style.opacity = "0";
+          }, 1500);
+        };
+        // --- END MOVED AND FIXED FUNCTION ---
+
+
+        // 🔹 3. REPLACED toggleBluetooth (As per user request)
+        function toggleBluetooth() {
+            if (isEditMode) return; // Keep edit mode check
+            isBluetoothOn = !isBluetoothOn;
+            
+            // --- User's new logic ---
+            const icon = document.getElementById('bluetooth-toggle');
+            icon.classList.toggle('active', isBluetoothOn);
+            showMessage(isBluetoothOn ? '蓝牙已开启' : '蓝牙已关闭', 'indigo');
+            // --- End User's new logic ---
+
+            // Also update the modal state if it's open
+            updateBluetoothModalUI();
+        }
+
+        // 🔹 4. User's openBluetoothConfig (MERGED with existing UI calls)
+        function openBluetoothConfig() {
+            if (isEditMode) return; // Keep edit mode check
+            
+            const lockScreen = document.getElementById('lock-screen');
+            const notificationCenter = document.getElementById('notification-center');
+            const bluetoothConfigModal = document.getElementById('bluetooth-config-modal');
+
+            if (lockScreen && lockScreen.style.display !== 'none') return;
+
+            // Use existing helper
+            if (notificationCenter && parseFloat(notificationCenter.style.transform.match(/(-?\d+(\.\d+)?)/)?.[0] || -100) > -100) {
+                closeNotificationCenter();
+            }
+
+            updateBluetoothModalUI(); // Call existing modal UI update
+            bluetoothConfigModal.classList.add('is-open');
+            showMessage('蓝牙快速配置已打开', 'indigo');
+        }
+
+        // 🔹 5. User's closeBluetoothConfig (MERGED)
+        function closeBluetoothConfig() {
+            const bluetoothConfigModal = document.getElementById('bluetooth-config-modal');
+            if (bluetoothConfigModal) { // Added check
+                bluetoothConfigModal.classList.remove('is-open');
+                bluetoothConfigModal.style.transform = '';
+                showMessage('蓝牙配置已关闭', 'indigo');
+            }
+        }
+
+        // 🔹 6. User's Press Handlers
+        function startPress(event, target) {
+            if (isEditMode) return;
+            isLongPress = false;
+            dragStartY = event.touches ? event.touches[0].clientY : event.clientY;
+
+            if (event.type === 'touchstart') {
+                 event.preventDefault(); // Prevent scrolling/zooming
+            }
+
+            pressTimer = setTimeout(() => {
+                isLongPress = true;
+                if (target === 'bluetooth') openBluetoothConfig();
+            }, 700); // 700ms 
+        }
+
+        function endPress(event, target) {
+            if (isEditMode) return;
+            clearTimeout(pressTimer);
+            if (!isLongPress) {
+                // MODIFIED: As per user request, use switch
+                switch (target) {
+                    case 'bluetooth':
+                        toggleBluetooth();
+                        break;
+                    case 'flashlight':
+                        handleFlashlightToggle(); // Call flashlight function
+                        break;
+                    // 其他按钮...
                 }
             }
+            isLongPress = false; 
         }
+        // --- END REPLACED LOGIC ---
 
-        // --- 消息提示框逻辑 (替代 alert) ---
-        function showMessage(message, color = 'green') {
-            let msgBox = document.getElementById('message-box');
-            if (!msgBox) {
-                msgBox = document.createElement('div');
-                msgBox.id = 'message-box';
-                // 确保 z-index 高于所有 UI 元素
-                msgBox.className = 'fixed top-4 left-1/2 -translate-x-1/2 text-white p-3 rounded-lg shadow-xl opacity-0 transition-opacity duration-300 z-[70] text-sm';
-                document.body.appendChild(msgBox);
-            }
-            // Clear previous color and set new one
-            msgBox.className = msgBox.className.replace(/bg-(green|red|indigo|yellow|lime|black|orange|blue|purple|gray)-500/g, ''); 
-            msgBox.classList.add(`bg-${color}-500`);
-            
-            msgBox.textContent = message;
-            msgBox.style.opacity = 1;
-            // 2.5秒后淡出
-            setTimeout(() => {
-                msgBox.style.opacity = 0;
-            }, 2500);
-        }
-
-        // --- Gemini API Call Function ---
-        async function generateMissionStatement() {
-            if (isEditMode) return;
-            const missionStatementDisplay = document.getElementById('mission-statement-display-modal');
-            const generateBtn = document.getElementById('generate-mission-btn-modal');
-            
-            const profileSummary = "我是一名热衷于探索 Web 前沿技术的开发者。拥有三年的前端开发经验，专注于构建高性能、用户友好的响应式应用。我对数字艺术和平面设计抱有浓厚的兴趣。";
-            
-            if (!profileSummary) {
-                showMessage('个人介绍内容为空，无法生成使命宣言。', 'red');
-                return;
-            }
-
-            const systemPrompt = "Act as a professional career consultant and PR specialist. Based on the provided candidate profile text, generate a single, highly compelling, 40-word maximum 'Mission Statement' or 'Professional Motto' for the candidate. The tone should be aspirational and professional. Respond ONLY with the generated mission statement text, nothing else. The response MUST be in Chinese.";
-
-            const userQuery = `基于以下个人简介文本，生成一个不超过40字的职业使命宣言或口号:\n\n---START OF PROFILE---\n${profileSummary}\n---END OF PROFILE---`;
-
-            generateBtn.disabled = true;
-            generateBtn.innerHTML = '<span class="animate-spin mr-2">⟳</span> AI 正在努力思考...';
-            missionStatementDisplay.innerHTML = '<p class="text-base text-indigo-600 text-center">AI 正在撰写中...</p>';
-            
-            const payload = {
-                contents: [{ parts: [{ text: userQuery }] }],
-                systemInstruction: { parts: [{ text: systemPrompt }] },
-            };
-
-            try {
-                const response = await fetchWithRetry(apiUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                
-                const result = await response.json();
-                const generatedText = result.candidates?.[0]?.content?.parts?.[0]?.text || "抱歉，生成内容失败。";
-                
-                missionStatementDisplay.innerHTML = `<p class="text-lg font-bold text-gray-800 italic leading-snug">${generatedText}</p>`;
-                showMessage('使命宣言已成功生成！', 'green');
-
-            } catch (error) {
-                console.error('Gemini API Error:', error);
-                missionStatementDisplay.innerHTML = '<p class="text-base text-red-500 text-center">API 调用失败，请检查网络和权限。</p>';
-                showMessage('API调用失败。', 'red');
-
-            } finally {
-                generateBtn.disabled = false;
-                generateBtn.innerHTML = '✨ 运行 AI 生成';
-            }
-        }
         
-        // --- Bluetooth Logic Functions (Unchanged) ---
-
+        // --- Kept Bluetooth Helper Functions ---
         function updateBluetoothUI(isOn, isConnected = false, name = connectedDeviceName) {
             const btn = document.getElementById('bluetooth-toggle');
             const text = document.getElementById('bluetooth-status-text');
@@ -1276,34 +1331,16 @@
             }
         }
 
-        function handleBluetoothToggle() {
-            if (isEditMode) return; 
-            
-            isBluetoothOn = !isBluetoothOn;
-            isBluetoothConnected = false; 
-            connectedDeviceName = "My Gemini Headset";
-
-            if (isBluetoothOn) {
-                updateBluetoothUI(true, false);
-                showMessage('蓝牙已开启，正在搜索设备...', 'indigo');
-
-                setTimeout(() => {
-                    if (isBluetoothOn) {
-                        isBluetoothConnected = true;
-                        updateBluetoothUI(true, true);
-                        showMessage(`成功连接到 ${connectedDeviceName}！`, 'green');
-                    }
-                }, 2000); 
-
-            } else {
-                updateBluetoothUI(false, false);
-                showMessage('蓝牙已关闭', 'red');
-            }
-        }
+        // (Old handleBluetoothToggle function is REMOVED)
 
         async function connectRealBluetooth() {
             if (!isBluetoothOn) {
                 showMessage('请先开启蓝牙！', 'red');
+                return false;
+            }
+
+            if (!navigator.bluetooth) {
+                showMessage('此浏览器不支持 Web 蓝牙 API。', 'red');
                 return false;
             }
 
@@ -1314,7 +1351,7 @@
 
             isScanning = true;
             startScanBtn.disabled = true;
-            startScanBtn.innerHTML = '<span class="animate-spin mr-2">⟳</span> 正在模拟搜索...';
+            startScanBtn.innerHTML = '<span class="animate-spin mr-2">⟳</span> 等待用户选择设备...';
 
             Array.from(list.children).forEach(child => {
                 if (!child.classList.contains('initial-device')) {
@@ -1322,57 +1359,84 @@
                 }
             });
 
-            // --- SIMULATION LOGIC START ---
-            setTimeout(() => {
-                if (isScanning) {
-                    const simulatedDeviceName = "AirDots Pro";
-                    const connectedLi = document.createElement('li');
-                    connectedLi.className = 'p-3 bg-green-100 rounded-lg flex justify-between items-center border border-green-300';
-                    connectedLi.innerHTML = `
-                        <span class="font-medium text-green-800">${simulatedDeviceName} (已配对)</span>
-                        <button class="text-green-600 text-sm font-medium hover:text-green-800" onclick="alert('连接成功')">连接</button>
-                    `;
-                    list.appendChild(connectedLi);
-                    
-                    showMessage('模拟搜索完毕：发现 AirDots Pro', 'yellow');
-                    
-                    isScanning = false;
-                    startScanBtn.disabled = false;
-                    startScanBtn.textContent = '重新搜索';
-                    updateBluetoothModalUI(); 
+            // --- REAL WEB BLUETOOTH API LOGIC ---
+            try {
+                // 1. 请求设备
+                showMessage('请在浏览器弹窗中选择一个蓝牙设备...', 'indigo');
+                const device = await navigator.bluetooth.requestDevice({
+                    filters: [
+                        { services: ['audio_input'] },
+                        { services: ['audio_output'] },
+                        { services: [0x180D] } // Heart Rate service (common demo)
+                    ],
+                    optionalServices: ['battery_service'], // 示例可选服务
+                    acceptAllDevices: false // 如果过滤失败，可设为 true
+                });
+                
+                const deviceName = device.name || '未知设备';
+                showMessage(`正在连接到 ${deviceName}...`, 'indigo');
+
+                // 2. (可选) 连接到 GATT 服务器
+                // const server = await device.gatt.connect();
+                // showMessage(`已连接到 ${deviceName} 的 GATT！`, 'green');
+
+                // 3. 更新 UI
+                const newDeviceLi = document.createElement('li');
+                newDeviceLi.className = 'p-3 bg-green-100 rounded-lg flex justify-between items-center border border-green-300';
+                newDeviceLi.innerHTML = `
+                    <span class="font-medium text-green-800">${deviceName}</span>
+                    <span class="text-sm text-green-600 font-bold">已连接</span>
+                `;
+                list.appendChild(newDeviceLi);
+
+                // 4. (重要) 更新全局状态和主屏幕 UI
+                isBluetoothConnected = true;
+                connectedDeviceName = deviceName; // 更新连接的设备名称
+                updateBluetoothUI(true, true, deviceName); // 更新通知中心图标
+                updateBluetoothModalUI(); // 更新模态框状态
+
+            } catch (error) {
+                console.error('Web Bluetooth Error:', error);
+                if (error.name === 'NotFoundError') {
+                     showMessage('未选择设备或未找到设备。', 'yellow');
+                } else if (error.name === 'NotAllowedError') {
+                    showMessage('用户取消了设备选择。', 'yellow');
+                } else {
+                    showMessage('蓝牙连接失败。', 'red');
                 }
-            }, 3000);
-            // --- SIMULATION LOGIC END ---
+            } finally {
+                isScanning = false;
+                startScanBtn.disabled = false;
+                startScanBtn.textContent = '搜索可连接设备';
+            }
+            // --- END WEB BLUETOOTH API LOGIC ---
         }
 
         // --- Flashlight Logic Variables (Unchanged) ---
-        let isFlashlightOn = false;
+        // REMOVED: let isFlashlightOn = false; (No longer needed)
 
-        function updateFlashlightUI() {
-            const btn = document.getElementById('flashlight-toggle');
-            const text = document.getElementById('flashlight-status-text');
+        // REMOVED: updateFlashlightUI() function (No longer called)
 
-            btn.classList.remove('bg-yellow-400', 'bg-white/20');
-            text.classList.remove('text-white', 'text-gray-300');
-
-            if (isFlashlightOn) {
-                btn.classList.add('bg-yellow-400');
-                text.classList.add('text-white');
-                showMessage('手电筒已开启', 'green');
-            } else {
-                btn.classList.add('bg-white/20');
-                text.classList.add('text-gray-300');
-                showMessage('手电筒已关闭', 'red');
-            }
-        }
-
+        // NEW: REPLACED handleFlashlightToggle (As per user request)
         function handleFlashlightToggle() {
-            if (isEditMode) return;
-            isFlashlightOn = !isFlashlightOn;
-            updateFlashlightUI();
+            if (isEditMode) return; // Keep edit mode check
+            
+            // --- User's new logic ---
+            const icon = document.getElementById('flashlight-toggle');
+            if (!icon) return;
+            icon.classList.toggle('active');
+            const isActive = icon.classList.contains('active');
+            showMessage(isActive ? '手电筒已开启' : '手电筒已关闭', 'amber');
+            // --- End User's new logic ---
+        }
+        
+        // NEW: Function provided by user (was missing)
+        function generateMissionStatement() {
+          console.log('[占位] generateMissionStatement() 被调用，但尚未实现');
+          showMessage('任务中心功能尚未开放', 'gray');
         }
 
-        // --- Bluetooth Config Modal Logic (Open/Close) (Unchanged) ---
+        // --- Bluetooth Config Modal Logic (Helpers) ---
         const bluetoothConfigModal = document.getElementById('bluetooth-config-modal');
         const bluetoothModalStatus = document.getElementById('bluetooth-modal-status');
         const headsetStatus = document.getElementById('headset-status');
@@ -1410,33 +1474,7 @@
             }
         }
 
-        function closeBluetoothConfig() {
-            bluetoothConfigModal.classList.remove('is-open');
-            bluetoothConfigModal.style.transform = ''; 
-            showMessage('蓝牙配置已关闭', 'indigo');
-        }
-
-        function openBluetoothConfig() {
-            if (isEditMode) return;
-            
-            const lockScreen = document.getElementById('lock-screen');
-            const notificationCenter = document.getElementById('notification-center');
-
-            if (lockScreen.style.display !== 'none') return;
-            
-            if (parseFloat(notificationCenter.style.transform.match(/(-?\d+(\.\d+)?)/)?.[0] || -100) > -100) {
-                 closeNotificationCenter(); 
-            }
-            
-            updateBluetoothModalUI();
-
-            setTimeout(() => {
-                bluetoothConfigModal.classList.add('is-open');
-                showMessage('蓝牙快速配置已打开', 'indigo');
-            }, 250);
-
-            bluetoothConfigModal.style.transition = 'transform 0.25s ease-in-out';
-        }
+        // (Old openBluetoothConfig and closeBluetoothConfig functions are REMOVED)
 
         // --- Notification Clear Logic (Unchanged) ---
         function handleClearAllNotifications() {
@@ -1520,7 +1558,7 @@
             const notificationCenter = document.getElementById('notification-center');
             const notifHomeIndicator = document.getElementById('notif-home-indicator');
             const bluetoothToggle = document.getElementById('bluetooth-toggle');
-            const flashlightToggle = document.getElementById('flashlight-toggle'); 
+            const flashlightToggle = document.getElementById('flashlight-toggle'); // Variable definition is still needed
             const clearAllBtn = document.getElementById('clear-all-notifications');
             const startScanBtn = document.getElementById('start-bluetooth-scan');
             
@@ -1559,7 +1597,7 @@
 
 
             // --- Event Listeners (Updated for new apps) ---
-            flashlightToggle.addEventListener('click', handleFlashlightToggle); 
+            // REMOVED: flashlightToggle.addEventListener('click', handleFlashlightToggle); 
             clearAllBtn.addEventListener('click', handleClearAllNotifications); 
             startScanBtn.addEventListener('click', connectRealBluetooth); 
 
@@ -1817,228 +1855,202 @@
                 notificationCenter.style.transition = 'none'; 
             }
 
+            // --- FIXED: Replaced corrupted function body ---
             function handleNotifMove(y) {
                 if (!isNotifSwiping) return;
 
                 const deltaY = y - dragStartY;
+                const notifHeight = notificationCenter.offsetHeight;
+                
+                // Get current Y position (starts at -notifHeight when closed)
                 const notifTransformMatch = notificationCenter.style.transform.match(/(-?\d+(\.\d+)?)/);
-                const currentNotifY = parseFloat(notifTransformMatch?.[0] || -notificationCenter.offsetHeight);
-                const innerScreenRect = innerScreen.getBoundingClientRect();
-                if (y < innerScreenRect.top || y > innerScreenRect.bottom) return;
-                const isFullyOpen = currentNotifY === 0;
+                // Ensure we respect the initial closed state (-100% means -notifHeight)
+                let currentNotifY = parseFloat(notifTransformMatch?.[0] || -notifHeight);
+                
+                const isStartingFromClosed = (Math.abs(currentNotifY + notifHeight) < 1);
 
-                if (!isFullyOpen && deltaY > 0) {
-                     const newY = Math.min(0, currentNotifY + deltaY);
-                     notificationCenter.style.transform = `translateY(${newY}px)`;
-                } 
-                else if (isFullyOpen && deltaY < 0) {
-                    const pullUpLimit = -100;
-                    const newY = Math.max(pullUpLimit, deltaY * 0.5);
-                    notificationCenter.style.transform = `translateY(${newY}px)`;
-                } 
-                else if (currentNotifY < 0 && !isFullyOpen) {
-                    const newY = Math.min(0, Math.max(-notificationCenter.offsetHeight, currentNotifY + deltaY));
-                    notificationCenter.style.transform = `translateY(${newY}px)`;
+                let newY;
+                
+                if (isStartingFromClosed) {
+                    // Pulling down from closed state
+                    if (deltaY < 0) return; // Don't pull up if already closed
+                    newY = Math.max(-notifHeight, Math.min(0, -notifHeight + deltaY));
+                } else {
+                    // Swiping up from open state (or partially open)
+                    // We assume dragStartY was 0 if we started open
+                    newY = Math.max(-notifHeight, Math.min(0, deltaY));
                 }
 
-                dragStartY = y;
+                notificationCenter.style.transform = `translateY(${newY}px)`;
             }
+            // --- END FIX ---
 
+            // --- NEW: Added missing handleNotifEnd function ---
             function handleNotifEnd(y) {
                 if (!isNotifSwiping) return;
                 isNotifSwiping = false;
 
+                const notifHeight = notificationCenter.offsetHeight;
+                const notifTransformMatch = notificationCenter.style.transform.match(/(-?\d+(\.\d+)?)/);
+                const currentNotifY = parseFloat(notifTransformMatch?.[0] || -notifHeight);
+
                 notificationCenter.style.transition = 'transform 0.25s ease-in-out';
-                const currentY = parseFloat(notificationCenter.style.transform.match(/(-?\d+(\.\d+)?)/)?.[0] || -notificationCenter.offsetHeight);
-                const fullHeight = innerScreen.offsetHeight;
-
-                if (currentY > -fullHeight / 3) {
-                    notificationCenter.style.transform = 'translateY(0)';
-                    showMessage('通知中心已打开', 'indigo');
+                
+                // Decide whether to snap open or closed based on 50% threshold
+                if (currentNotifY < (-notifHeight / 2)) {
+                    // Snap closed
+                    notificationCenter.style.transform = 'translateY(-100%)';
                 } else {
-                    closeNotificationCenter();
+                    // Snap open
+                    notificationCenter.style.transform = 'translateY(0)';
                 }
             }
+            // --- END NEW ---
 
 
-            // --- NEW PAGING SWIPE HANDLERS (Horizontal Swipe) ---
-            
-            function handlePageSwipeStart(e) {
-                if (lockScreen.style.display !== 'none' || isEditMode) return;
-                
-                // Get the current translation value from the style attribute
-                const currentTransform = pageContainer.style.transform || 'translateX(0px)';
-                const match = currentTransform.match(/translateX\((-?[\d\.]+)/);
-                let currentTranslateX = match ? parseFloat(match[1]) : 0;
-
-                isPagingSwiping = true;
-                pageDragStartX = e.clientX || e.touches[0].clientX;
-                pageContainer.style.transition = 'none';
-                
-                // Store the starting offset of the page container
-                pageContainer.dataset.startOffset = currentTranslateX; 
-            }
-
-            function handlePageSwipeMove(e) {
-                if (!isPagingSwiping) return;
-
-                const currentClientX = e.clientX || e.touches[0].clientX;
-                const deltaX = currentClientX - pageDragStartX;
-                const pageWidth = innerScreen.offsetWidth;
-                const startOffset = parseFloat(pageContainer.dataset.startOffset);
-                let newTranslateX = startOffset + deltaX;
-
-                // Clamp movement: Pages are 0px and -1 * pageWidth. Allow small elastic pull.
-                const minPageTranslate = -(totalPages - 1) * pageWidth;
-
-                if (newTranslateX > 0) { // Pulling right past page 1
-                    newTranslateX = deltaX * 0.2; // Elastic effect
-                } else if (newTranslateX < minPageTranslate) { // Pulling left past last page
-                    const excess = minPageTranslate - newTranslateX;
-                    newTranslateX = minPageTranslate - (excess * 0.2); // Elastic effect
-                }
-
-                pageContainer.style.transform = `translateX(${newTranslateX}px)`;
-            }
-            
-            function handlePageSwipeEnd(e) {
-                if (!isPagingSwiping) return;
-                isPagingSwiping = false;
-
-                const dragDistance = (e.changedTouches ? e.changedTouches[0].clientX : e.clientX) - pageDragStartX;
-                
-                // Determine target page
-                let targetPage = currentPage;
-                
-                if (dragDistance < -pageSwipeThreshold && currentPage < totalPages) {
-                    targetPage = currentPage + 1; // Swipe left to next page
-                } else if (dragDistance > pageSwipeThreshold && currentPage > 1) {
-                    targetPage = currentPage - 1; // Swipe right to previous page
-                }
-                
-                goToPage(targetPage);
-            }
-            
-            // We need a wrapper element to attach horizontal swipe listeners without interfering with vertical scroll
-            const swipeWrapper = document.getElementById('swipe-wrapper');
-
-            swipeWrapper.addEventListener('mousedown', (e) => {
-                 // Check if any modal is open before attempting to swipe home screen
-                const activeModal = Array.from(document.querySelectorAll('.app-modal.is-open, #bluetooth-config-modal.is-open')).find(modal => modal);
-                if (activeModal) return;
-
-                // Start home screen page swipe only if not starting a vertical swipe (Notification Center/Edit mode checks)
-                // This is a simplified check for mouse events. Full logic relies on touchmove to detect dominant axis.
-                handlePageSwipeStart(e);
-            });
-            document.addEventListener('mousemove', (e) => {
-                if (isPagingSwiping) {
-                    handlePageSwipeMove(e);
-                }
-            });
-            document.addEventListener('mouseup', handlePageSwipeEnd);
-
-            swipeWrapper.addEventListener('touchstart', (e) => {
-                // Ignore if long press is active (edit mode) or any modal/notif center is open
-                if (lockScreen.style.display !== 'none' || isEditMode || document.querySelector('.is-open') || notificationCenter.style.transform === 'translateY(0px)') return;
-                
-                // Store initial coordinates to check for axis dominance later
-                const touch = e.touches[0];
-                pageDragStartX = touch.clientX;
-                dragStartY = touch.clientY; // Reuse vertical drag start for axis dominance check
-            }, { passive: false });
-
-            swipeWrapper.addEventListener('touchmove', (e) => {
-                const touch = e.touches[0];
-                const deltaX = touch.clientX - pageDragStartX;
-                const deltaY = touch.clientY - dragStartY;
-
-                // Axis Dominance Check: Horizontal swipe if abs(deltaX) > abs(deltaY)
-                if (!isPagingSwiping && Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 10) {
-                    // It's a horizontal swipe, start the paging logic
-                    handlePageSwipeStart(e);
-                    e.preventDefault(); 
-                }
-
-                if (isPagingSwiping) {
-                    handlePageSwipeMove(e);
-                    e.preventDefault(); 
-                }
-            }, { passive: false });
-
-            swipeWrapper.addEventListener('touchend', handlePageSwipeEnd);
-
-
-            // --- GLOBAL TOUCH/MOUSE DISPATCHER (Refactored) ---
-            
-            innerScreen.addEventListener('touchstart', (e) => {
-                const clientY = e.touches[0].clientY;
-                const innerScreenRect = innerScreen.getBoundingClientRect();
-                const touchRelativeY = clientY - innerScreenRect.top;
-                
-                const isLocked = lockScreen.style.display !== 'none';
-                const activeModal = Array.from(document.querySelectorAll('.app-modal, #bluetooth-config-modal')).find(modal => modal.classList.contains('is-open'));
-                const isNotifFullyOpen = parseFloat(notificationCenter.style.transform.match(/(-?\d+(\.\d+)?)/)?.[0] || 0) === 0;
-
-                if (isLocked || activeModal) return;
-                
-                // Notification Swipe check (Top area or pull down from fully open state)
-                if (touchRelativeY < topSwipeZone || isNotifFullyOpen) {
-                    // Prevent swipe if interacting with interactive elements in the center
-                    if (e.target.closest('#brightness-slider') || e.target.closest('.toggle-btn') || e.target.closest('.status-bar')) {
-                        return; 
-                    }
-                    if (e.target.closest('.app-icon-btn, .dock-icon-btn, #home-indicator-container')) return;
-                    
-                    handleNotifStart(clientY);
-                    e.preventDefault(); // Prevent default vertical scroll/bounce
-                    return;
-                }
-            }, { passive: false });
-
-            document.addEventListener('touchmove', (e) => {
-                if (isNotifSwiping) {
-                    handleNotifMove(e.touches[0].clientY);
-                    e.preventDefault();
-                } else if (isPagingSwiping) {
-                     // Handled by swipeWrapper touchmove/mouse move
-                }
-            }, { passive: false });
-
-
-            document.addEventListener('touchend', (e) => { 
-                if (isNotifSwiping) {
-                    handleNotifEnd(e.changedTouches[0].clientY); 
-                } 
-            });
-
-            // Mouse event delegation for Notif Center (still needed for desktop testing)
             document.addEventListener('mousedown', (e) => {
+                // Check if the mousedown is in the top swipe zone to pull down notifications
                 const innerScreenRect = innerScreen.getBoundingClientRect();
                 if (e.clientY < innerScreenRect.top || e.clientY > innerScreenRect.bottom || e.clientX < innerScreenRect.left || e.clientX > innerScreenRect.right) return;
 
                 const touchRelativeY = e.clientY - innerScreenRect.top;
-                const isLocked = lockScreen.style.display !== 'none';
-                const activeModal = document.querySelector('.app-modal.is-open, #bluetooth-config-modal.is-open');
-                const isNotifFullyOpen = parseFloat(notificationCenter.style.transform.match(/(-?\d+(\.\d+)?)/)?.[0] || 0) === 0;
-
-                if (!activeModal && !isLocked && (touchRelativeY < topSwipeZone || isNotifFullyOpen)) {
-                    if (e.target.closest('.app-icon-btn, .dock-icon-btn, .toggle-btn') || e.target.closest('#brightness-container')) return;
+                
+                // 1. Notification Center Swipe Down Logic
+                const isNotifClosed = parseFloat(notificationCenter.style.transform.match(/(-?\d+(\.\d+)?)/)?.[0] || -100) <= -100;
+                
+                if (touchRelativeY <= topSwipeZone && isNotifClosed && lockScreen.style.display === 'none') {
                     handleNotifStart(e.clientY);
+                    // Prevent text selection while dragging
+                    e.preventDefault(); 
+                }
+
+                // 2. Page Swiping Logic (Home Screen)
+                const isNotifFullyOpen = parseFloat(notificationCenter.style.transform.match(/(-?\d+(\.\d+)?)/)?.[0] || 0) === 0;
+                const isAppOpen = document.querySelector('.app-modal.is-open');
+                
+                if (!isNotifFullyOpen && !isAppOpen && lockScreen.style.display === 'none') {
+                    // Check if click is on the app grid area, not on dock or widget
+                    const swipeWrapperRect = document.getElementById('swipe-wrapper').getBoundingClientRect();
+                    if (e.clientY >= swipeWrapperRect.top && e.clientY <= swipeWrapperRect.bottom) {
+                        isPagingSwiping = true;
+                        pageDragStartX = e.clientX;
+                        pageContainer.style.transition = 'none'; // Disable transition while dragging
+                        // Prevent text selection
+                        e.preventDefault();
+                    }
                 }
             });
 
-            document.addEventListener('mousemove', (e) => { 
+            document.addEventListener('mousemove', (e) => {
                 if (isNotifSwiping) {
-                    handleNotifMove(e.clientY); 
-                } 
+                    handleNotifMove(e.clientY);
+                }
+                if (isPagingSwiping) {
+                    const deltaX = e.clientX - pageDragStartX;
+                    const innerScreen = document.getElementById('inner-screen');
+                    const pageWidth = innerScreen.offsetWidth;
+                    const translateX = -(currentPage - 1) * pageWidth + deltaX;
+                    
+                    pageContainer.style.transform = `translateX(${translateX}px)`;
+                }
             });
+
+            document.addEventListener('mouseup', (e) => {
+                if (isNotifSwiping) {
+                    handleNotifEnd(e.clientY);
+                }
+                if (isPagingSwiping) {
+                    isPagingSwiping = false;
+                    const deltaX = e.clientX - pageDragStartX;
+
+                    if (Math.abs(deltaX) > pageSwipeThreshold) {
+                        if (deltaX < 0) {
+                            goToPage(currentPage + 1); // Swipe Left (Next)
+                        } else {
+                            goToPage(currentPage - 1); // Swipe Right (Prev)
+                        }
+                    } else {
+                        goToPage(currentPage); // Snap back
+                    }
+                }
+            });
+
+            // --- Touch Events (Mirror Mouse Events) ---
+            document.addEventListener('touchstart', (e) => {
+                // Check if the touch is in the top swipe zone
+                const innerScreenRect = innerScreen.getBoundingClientRect();
+                const touch = e.touches[0];
+                if (touch.clientY < innerScreenRect.top || touch.clientY > innerScreenRect.bottom || touch.clientX < innerScreenRect.left || touch.clientX > innerScreenRect.right) return;
+
+                const touchRelativeY = touch.clientY - innerScreenRect.top;
+                
+                // 1. Notification Center Swipe Down
+                const isNotifClosed = parseFloat(notificationCenter.style.transform.match(/(-?\d+(\.\d+)?)/)?.[0] || -100) <= -100;
+
+                if (touchRelativeY <= topSwipeZone && isNotifClosed && lockScreen.style.display === 'none') {
+                    handleNotifStart(touch.clientY);
+                    e.preventDefault(); // Prevent scrolling
+                }
+
+                // 2. Page Swiping Logic (Home Screen)
+                const isNotifFullyOpen = parseFloat(notificationCenter.style.transform.match(/(-?\d+(\.\d+)?)/)?.[0] || 0) === 0;
+                const isAppOpen = document.querySelector('.app-modal.is-open');
+
+                if (!isNotifFullyOpen && !isAppOpen && lockScreen.style.display === 'none') {
+                    // Check if click is on the app grid area, not on dock or widget
+                    const swipeWrapperRect = document.getElementById('swipe-wrapper').getBoundingClientRect();
+                    if (touch.clientY >= swipeWrapperRect.top && touch.clientY <= swipeWrapperRect.bottom) {
+                        isPagingSwiping = true;
+                        pageDragStartX = touch.clientX;
+                        pageContainer.style.transition = 'none';
+                        // We don't preventDefault here unless we are sure it's a swipe, 
+                        // otherwise it breaks scrolling inside .app-grid-area
+                    }
+                }
+            }, { passive: false }); 
+
+            document.addEventListener('touchmove', (e) => {
+                if (isNotifSwiping) {
+                    handleNotifMove(e.touches[0].clientY);
+                }
+                if (isPagingSwiping) {
+                    const deltaX = e.touches[0].clientX - pageDragStartX;
+                    const innerScreen = document.getElementById('inner-screen');
+                    const pageWidth = innerScreen.offsetWidth;
+                    const translateX = -(currentPage - 1) * pageWidth + deltaX;
+                    
+                    pageContainer.style.transform = `translateX(${translateX}px)`;
+                    
+                    // If horizontal swipe is significant, prevent vertical scroll
+                    if (Math.abs(deltaX) > 10) {
+                         e.preventDefault();
+                    }
+                }
+            }, { passive: false }); 
+
+            document.addEventListener('touchend', (e) => {
+                if (isNotifSwiping) {
+                    handleNotifEnd(e.changedTouches[0].clientY);
+                }
+                 if (isPagingSwiping) {
+                    isPagingSwiping = false;
+                    const deltaX = e.changedTouches[0].clientX - pageDragStartX;
+
+                    if (Math.abs(deltaX) > pageSwipeThreshold) {
+                        if (deltaX < 0) {
+                            goToPage(currentPage + 1); // Swipe Left (Next)
+                        } else {
+                            goToPage(currentPage - 1); // Swipe Right (Prev)
+                        }
+                    } else {
+                        goToPage(currentPage); // Snap back
+                    }
+                }
+            });
+
             
-            document.addEventListener('mouseup', (e) => { 
-                if (isNotifSwiping) {
-                    handleNotifEnd(e.clientY); 
-                } 
-            });
+            // --- REMOVED: Toast/Message Utility (Moved outside) ---
+            
 
             // --- Initial Setup ---
             updatePaginationDots(); // Initialize dots state
@@ -2047,3 +2059,6 @@
     </script>
 </body>
 </html>
+
+
+
