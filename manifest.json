@@ -1,7 +1,7 @@
 {
   "name": "RinMeow",
   "short_name": "RinMeow",
-  "display": "standalone",
+  "display": "fullscreen",
   "background_color": "#000000",
   "theme_color": "#000000",
   "start_url": "./RinMeow.html",
