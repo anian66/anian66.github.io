@@ -1,20 +1,257 @@
-{
-  "name": "Meow",
-  "short_name": "Meow",
-  "display": "fullscreen",
-  "background_color": "#000000",
-  "theme_color": "#000000",
-  "start_url": "./Meow.html",
-  "icons": [
-    {
-      "src": "https://placehold.co/192x192/000000/FFFFFF/png?text=RinMeow",
-      "sizes": "192x192",
-      "type": "image/png"
-    },
-    {
-      "src": "https://placehold.co/512x512/000000/FFFFFF/png?text=RinMeow",
-      "sizes": "512x512",
-      "type": "image/png"
+// 📱 mPhone 主系统 v3.1 (强化触摸兼容版)
+window.addEventListener("load", () => {
+  console.log("📱 mPhone 系统启动中...");
+
+  // ========== 🕒 动态时钟 ==========
+  function updateTime() {
+    const now = new Date();
+    let h = now.getHours();
+    let m = now.getMinutes();
+    if (m < 10) m = "0" + m;
+    const statusTime = document.getElementById("statusTime");
+    const lockTime = document.getElementById("lockTime");
+    const lockDate = document.getElementById("lockDate");
+    if (statusTime) statusTime.textContent = `${h}:${m}`;
+    if (lockTime) lockTime.textContent = `${h}:${m}`;
+    if (lockDate) {
+      const week = ["周日","周一","周二","周三","周四","周五","周六"];
+      lockDate.textContent = `${now.getMonth()+1}月${now.getDate()}日 ${week[now.getDay()]}`;
     }
-  ]
+  }
+  setInterval(updateTime, 1000);
+  updateTime();
+
+
+  // ========== 🔓 上滑解锁 ==========
+  const lockScreen = document.getElementById("lockScreen");
+  const homeScreen = document.getElementById("homeScreen");
+  const unlockArea = document.getElementById("unlockArea");
+  let startY = null;
+  let isDragging = false;
+
+  function startDrag(y) {
+    startY = y;
+    isDragging = true;
+  }
+
+  function moveDrag(y) {
+    if (!isDragging || !lockScreen) return;
+    const dy = startY - y;
+    if (dy > 0) {
+      eCancelScroll();
+      lockScreen.style.transition = "none";
+      lockScreen.style.transform = `translateY(${-dy * 0.4}px)`;
+    }
+  }
+
+  function endDrag(y) {
+    if (!isDragging || !lockScreen) return;
+    const dy = startY - y;
+    isDragging = false;
+    if (dy > 80) unlockPhone();
+    else {
+      lockScreen.style.transition = "all 0.25s ease";
+      lockScreen.style.transform = "translateY(0)";
+      lockScreen.style.opacity = "1";
+    }
+  }
+
+  // 禁止页面滚动
+  function eCancelScroll() {
+    document.body.style.overflow = "hidden";
+  }
+
+  function unlockPhone() {
+    lockScreen.style.transition = "all 0.4s ease";
+    lockScreen.style.transform = "translateY(-100%)";
+    lockScreen.style.opacity = "0";
+    homeScreen.style.display = "flex";
+    resetLockTimer();
+    document.body.style.overflow = "hidden";
+  }
+
+ const dragTarget = document.getElementById("lockScreen");
+
+if (dragTarget) {
+  dragTarget.addEventListener("touchstart", e => {
+    startDrag(e.touches[0].clientY);
+    e.preventDefault();
+  }, { passive: false });
+
+  dragTarget.addEventListener("touchmove", e => {
+    moveDrag(e.touches[0].clientY);
+    e.preventDefault();
+  }, { passive: false });
+
+  dragTarget.addEventListener("touchend", e => {
+    endDrag(e.changedTouches[0].clientY);
+    e.preventDefault();
+  }, { passive: false });
+
+  // 桌面鼠标兼容
+  dragTarget.addEventListener("mousedown", e => startDrag(e.clientY));
+  window.addEventListener("mousemove", e => moveDrag(e.clientY));
+  window.addEventListener("mouseup", e => endDrag(e.clientY));
 }
+
+
+
+  // ========== 📱 顶部下拉面板 ==========
+  const notifCenter = document.getElementById("notifCenter");
+  const widgetCenter = document.getElementById("widgetCenter");
+  let pulling = null, pullStartY = 0;
+  const PULL_ZONE_HEIGHT = 60;
+
+  function pullStart(e) {
+    const y = e.touches ? e.touches[0].clientY : e.clientY;
+    const x = e.touches ? e.touches[0].clientX : e.clientX;
+    if (y > PULL_ZONE_HEIGHT) return;
+    pulling = (x < window.innerWidth / 2) ? "notif" : "widget";
+    pullStartY = y;
+  }
+
+  function pullMove(e) {
+    if (!pulling) return;
+    const y = e.touches ? e.touches[0].clientY : e.clientY;
+    const dy = y - pullStartY;
+    if (dy < 0) return;
+    const panel = (pulling === "notif") ? notifCenter : widgetCenter;
+    if (panel) {
+      const maxHeight = window.innerHeight * 0.7;
+      const progress = Math.min(dy / maxHeight, 1);
+      panel.style.transition = "none";
+      panel.style.transform = `translateY(${(-100 + progress * 100)}%)`;
+    }
+  }
+
+  function pullEnd(e) {
+    if (!pulling) return;
+    const y = e.changedTouches ? e.changedTouches[0].clientY : e.clientY;
+    const dy = y - pullStartY;
+    const panel = (pulling === "notif") ? notifCenter : widgetCenter;
+    if (panel) {
+      if (dy > 100) {
+        panel.style.transition = "transform 0.3s ease";
+        panel.style.transform = "translateY(0%)";
+        panel.dataset.open = "true";
+      } else {
+        panel.style.transition = "transform 0.3s ease";
+        panel.style.transform = "translateY(-100%)";
+        panel.dataset.open = "false";
+      }
+    }
+    pulling = null;
+  }
+
+  document.addEventListener("mousedown", pullStart);
+  document.addEventListener("mousemove", pullMove);
+  document.addEventListener("mouseup", pullEnd);
+  document.addEventListener("touchstart", pullStart, { passive: true });
+  document.addEventListener("touchmove", pullMove, { passive: true });
+  document.addEventListener("touchend", pullEnd, { passive: true });
+
+  // 点击关闭已打开的面板
+  document.addEventListener("click", () => {
+    [notifCenter, widgetCenter].forEach(panel => {
+      if (panel && panel.dataset.open === "true") {
+        panel.style.transform = "translateY(-100%)";
+        panel.dataset.open = "false";
+      }
+    });
+  });
+
+
+  // ========== ⚙️ 智能缩放 ==========
+  function autoScalePhone() {
+    const phone = document.querySelector(".phone-frame");
+    if (!phone) return;
+    const baseWidth = 400, baseHeight = 880;
+    const winW = window.innerWidth, winH = window.innerHeight;
+    const scale = Math.min(winW / (baseWidth + 60), winH / (baseHeight + 60));
+    phone.style.transform = `scale(${scale})`;
+    phone.style.transformOrigin = "center center";
+  }
+  autoScalePhone();
+  window.addEventListener("resize", autoScalePhone);
+
+
+  // ========== ⏰ 自动锁屏 ==========
+  let lockTimeout = null;
+  function resetLockTimer() {
+    clearTimeout(lockTimeout);
+    lockTimeout = setTimeout(() => {
+      homeScreen.style.display = "none";
+      lockScreen.style.transition = "all 0.4s ease";
+      lockScreen.style.transform = "translateY(0)";
+      lockScreen.style.opacity = "1";
+    }, 30000);
+  }
+  ["click","mousemove","touchstart"].forEach(e =>
+    document.addEventListener(e, resetLockTimer)
+  );
+  resetLockTimer();
+
+
+  // ========== 🎵 音乐系统 ==========
+  const musicBar = document.getElementById("musicProgressBar");
+  const musicBtn = document.getElementById("musicToggle");
+  const musicTitle = document.getElementById("musicTitle");
+  const musicArtist = document.getElementById("musicArtist");
+  let isPlaying = true, progress = 0;
+
+  const MusicApp = {
+    current: { title: "夏日晴空", artist: "小A" },
+    play() { isPlaying = true; if (musicBtn) musicBtn.textContent = "⏸"; },
+    pause() { isPlaying = false; if (musicBtn) musicBtn.textContent = "▶"; },
+    toggle() { isPlaying ? this.pause() : this.play(); },
+    updateProgress() {
+      if (isPlaying && musicBar) {
+        progress = (progress + 1) % 100;
+        musicBar.style.width = `${progress}%`;
+      }
+    }
+  };
+  if (musicBtn) {
+    musicBtn.addEventListener("click", ()=>MusicApp.toggle());
+    setInterval(()=>MusicApp.updateProgress(),500);
+  }
+
+  const appMusic = document.getElementById("appMusic");
+  if (appMusic) {
+    appMusic.addEventListener("click", ()=>{
+      createBubbleMessage("🎵 打开音乐播放器");
+      MusicApp.play();
+    });
+  }
+
+  // ========== 🔔 气泡通知 ==========
+  function createBubbleMessage(text="您有一条新消息") {
+    const bubble = document.createElement("div");
+    bubble.textContent = text;
+    Object.assign(bubble.style, {
+      position: "absolute",
+      bottom: "100px",
+      left: "50%",
+      transform: "translateX(-50%)",
+      padding: "8px 16px",
+      borderRadius: "20px",
+      background: "rgba(255,255,255,0.15)",
+      backdropFilter: "blur(10px)",
+      boxShadow: "0 4px 10px rgba(0,0,0,0.4)",
+      transition: "opacity 0.5s ease",
+      opacity: "0",
+      zIndex: "10000"
+    });
+    document.querySelector(".phone-frame").appendChild(bubble);
+    setTimeout(()=>bubble.style.opacity="1",100);
+    setTimeout(()=>{
+      bubble.style.opacity="0";
+      setTimeout(()=>bubble.remove(),600);
+    },4000);
+  }
+
+  // ========== ✅ 自检 ==========
+  console.log("✅ main.js 已加载");
+  if (window.ThemeEngine) console.log("✅ ThemeEngine 已连接");
+  else console.warn("⚠️ 未检测到 ThemeEngine");
+});
